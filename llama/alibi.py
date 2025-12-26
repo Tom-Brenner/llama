@@ -7,13 +7,38 @@ import math
 
 
 def get_alibi_slopes(cfg: ModelConfig) -> Tensor:
-    # NOTE: This keeps the existing (non-canonical) slope schedule; only dtype handling is fixed here.
-    start = float(2 ** (-8 / cfg.n_heads))
-    ratio = start
-    i = torch.arange(cfg.n_heads, dtype=torch.float32)
-    start_t = torch.tensor(start, dtype=torch.float32)
-    ratio_t = torch.tensor(ratio, dtype=torch.float32)
-    return start_t * torch.pow(ratio_t, i)  # n_heads (float32)
+    """
+    Canonical ALiBi slopes.
+
+    Reference construction (commonly used in ALiBi implementations):
+    - If n_heads is a power of two: geometric progression with a start determined by n_heads.
+    - Otherwise: slopes for the closest lower power of two, then append every other slope from
+      the 2x power-of-two set (interleave/extrapolate) until reaching n_heads.
+    """
+
+    def _get_slopes_power_of_2(n: int) -> Tensor:
+        # start = 2^(-2^(-(log2(n) - 3))) from reference implementations
+        start = 2.0 ** (-(2.0 ** (-(math.log2(n) - 3.0))))
+        ratio = start
+        i = torch.arange(n, dtype=torch.float32)
+        start_t = torch.tensor(start, dtype=torch.float32)
+        ratio_t = torch.tensor(ratio, dtype=torch.float32)
+        return start_t * torch.pow(ratio_t, i)  # (n,) float32
+
+    n_heads = int(cfg.n_heads)
+    if n_heads <= 0:
+        raise ValueError(f"n_heads must be positive, got {n_heads}.")
+
+    # Power-of-two fast path.
+    if (n_heads & (n_heads - 1)) == 0:
+        return _get_slopes_power_of_2(n_heads)
+
+    closest_power_of_2 = 2 ** int(math.floor(math.log2(n_heads)))
+    base = _get_slopes_power_of_2(closest_power_of_2)  # (closest_power_of_2,)
+    # Recurse on 2x power-of-two and take even indices (0,2,4,...) per canonical method.
+    extra_all = _get_slopes_power_of_2(2 * closest_power_of_2)  # (2*closest_power_of_2,)
+    extra = extra_all[0::2][: (n_heads - closest_power_of_2)]
+    return torch.cat([base, extra], dim=0).to(torch.float32)
 
 
 def get_linear_bias(cfg: ModelConfig) -> Tensor:
