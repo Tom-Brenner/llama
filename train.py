@@ -9,7 +9,12 @@ from datetime import datetime
 
 from torch.nn import functional as F
 from typing import Tuple, Dict, Any
-from torch.amp import autocast, GradScaler
+# torch 2.0.x exposes autocast in torch.amp, but GradScaler is in torch.cuda.amp.
+try:
+    from torch.amp import autocast  # type: ignore
+except Exception:  # pragma: no cover
+    from torch.cuda.amp import autocast  # type: ignore
+from torch.cuda.amp import GradScaler
 from argparse import ArgumentParser
 from train_utils import save_checkpoint, get_model_info, get_model_and_config
 from data import DataLoader
