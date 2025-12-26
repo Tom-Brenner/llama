@@ -56,10 +56,14 @@ class MHABase(nn.Module, ABC):
         self.QKV = nn.Linear(cfg.n_embd, cfg.n_embd * 3, bias=cfg.attn_bias)
         self.O = nn.Linear(cfg.n_embd, cfg.n_embd, bias=cfg.attn_bias)
 
-        mask = torch.triu(
-            torch.ones(1, 1, cfg.ctx_size, cfg.ctx_size) * float("-inf"), diagonal=1
+        # Keep reusable positional/attention buffers in float32 for numeric stability.
+        mask = torch.full(
+            (1, 1, cfg.ctx_size, cfg.ctx_size),
+            float("-inf"),
+            dtype=torch.float32,
         )
-        self.register_buffer("mask", mask)
+        mask = torch.triu(mask, diagonal=1)
+        self.register_buffer("mask", mask, persistent=False)
 
     @abstractmethod
     def forward(self, x: Tensor) -> Tensor:

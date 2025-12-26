@@ -7,26 +7,31 @@ import math
 
 
 def get_alibi_slopes(cfg: ModelConfig) -> Tensor:
-    start = 2 ** (-8 / cfg.n_heads)
+    # NOTE: This keeps the existing (non-canonical) slope schedule; only dtype handling is fixed here.
+    start = float(2 ** (-8 / cfg.n_heads))
     ratio = start
-    return torch.tensor([start * (ratio ** i) for i in range(cfg.n_heads)])
+    i = torch.arange(cfg.n_heads, dtype=torch.float32)
+    start_t = torch.tensor(start, dtype=torch.float32)
+    ratio_t = torch.tensor(ratio, dtype=torch.float32)
+    return start_t * torch.pow(ratio_t, i)  # n_heads (float32)
 
 
 def get_linear_bias(cfg: ModelConfig) -> Tensor:
-    slopes = get_alibi_slopes(cfg).view(cfg.n_heads, 1, 1)
-    pos = torch.arange(cfg.ctx_size)
-    distances = pos[None, :] - pos[:, None]
-    distances = torch.where(distances > 0, 0, distances)  # ctx_size, ctx_size
-    distances.unsqueeze_(0)  # 1, ctx_size, ctx_size
-    linear_bias = distances * slopes  # n_heads, ctx_size, ctx_size
-    return linear_bias.unsqueeze(0)  # 1, n_heads, ctx_size, ctx_size
+    slopes = get_alibi_slopes(cfg).view(cfg.n_heads, 1, 1)  # n_heads,1,1 (float32)
+    pos = torch.arange(cfg.ctx_size, dtype=torch.float32)
+    distances = pos[None, :] - pos[:, None]  # ctx_size, ctx_size (float32)
+    distances = torch.where(distances > 0, torch.zeros_like(distances), distances)
+    distances = distances.unsqueeze(0)  # 1, ctx_size, ctx_size
+    linear_bias = distances * slopes  # n_heads, ctx_size, ctx_size (float32)
+    return linear_bias.unsqueeze(0).to(torch.float32)  # 1, n_heads, ctx_size, ctx_size
 
 
 class MHA(MHABase):
     def __init__(self, cfg: ModelConfig) -> None:
         super().__init__(cfg)
         linear_bias = get_linear_bias(cfg)
-        self.register_buffer("linear_bias", linear_bias)
+        # Keep reusable ALiBi bias in float32 for stability under AMP.
+        self.register_buffer("linear_bias", linear_bias, persistent=False)
 
     def forward(self, x: Tensor) -> Tensor:
         # x -> bsz, seq_len, n_embd
