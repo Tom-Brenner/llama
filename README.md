@@ -1,12 +1,12 @@
 # Positional Embeddings Bench: APE vs RoPE vs ALiBi
 
-Train a small LLaMA-style language model on TinyStories and compare three positional encodings:
+Train a small LLaMA-style language model on a toy dataset (TinyStories) and compare three positional encodings:
 
 - **pos** – Absolute sinusoidal (APE)
 - **rope** – Rotary Position Embedding
 - **alibi** – Attention with Linear Biases
 
-This repo contains a minimal training script and implementations packaged under `llama/`. It logs metrics, saves checkpoints, and (optionally) reproduces the figures from the blog post.
+This repo contains a minimal training script and implementations packaged under `llama/`. It logs metrics, saves checkpoints, and can be used to reproduce the figures from the [`original author's blog post`](https://towardsdatascience.com/positional-embeddings-in-transformers-a-math-guide-to-rope-alibi/)
 
 ![Loss vs Steps](training_loss.png)
 ![Validation Metrics](validation_results.png)
@@ -88,6 +88,7 @@ PY
 ````
 
 > The trainer auto-detects device: `cuda` → `mps` (Apple Silicon) → `cpu`.
+> When multiple GPUs are available, selection is enabled through the --device flag.
 
 ---
 
@@ -162,12 +163,11 @@ outputs/
 
 ---
 
-> The repo already includes `training_loss.png` and `validation_results.png` from a reference run on TinyStories (28M params, 4 heads, 4 layers, 256 ctx/emb, 1000 steps, batch 32 on M2).
+> The repo already includes `training_loss.png` and `validation_results.png` from a reference run on TinyStories (28M params, 4 heads, 4 layers, 256 ctx/emb, 1000 steps, batch 32 on Ti1080).
 
 ---
 
 
-
 ## 🪪 License
 
-This project is for educational and research use. See `LICENSE` if included in your copy of the repo.
+None required: This project is for educational and research use. 
