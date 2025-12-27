@@ -224,6 +224,12 @@ def main():
     parser = ArgumentParser(description="Train LLaMA-style models with different positional encodings")
     parser.add_argument("--embedding", type=str, choices=["alibi", "rope", "pos"], required=True,
                        help="Type of positional embedding to use")
+    parser.add_argument(
+        "--device",
+        type=str,
+        default="0",
+        help="Device selector. Use an integer GPU index (default: 0), or 'cpu' / 'mps'.",
+    )
     parser.add_argument("--batch_size", type=int, default=16, help="Batch size for training")
     parser.add_argument("--max_steps", type=int, default=1000, help="Maximum number of training steps")
     parser.add_argument("--log_interval", type=int, default=50, help="Steps between logging")
@@ -239,14 +245,32 @@ def main():
     random.seed(args.seed)
     
     # Setup device
-    if torch.cuda.is_available():
-        device = "cuda"
-    elif torch.backends.mps.is_available():
-        device = "mps"
+    device_arg = args.device.strip().lower()
+    if device_arg in {"cpu", "mps"}:
+        device = device_arg
+        if device == "mps" and not torch.backends.mps.is_available():
+            raise RuntimeError("Requested device 'mps' but torch.backends.mps is not available.")
     else:
-        device = "cpu"
+        # Treat as CUDA device index
+        try:
+            cuda_index = int(device_arg)
+        except ValueError as e:
+            raise ValueError(
+                f"Invalid --device '{args.device}'. Use an integer GPU index (e.g. 0) or 'cpu'/'mps'."
+            ) from e
+
+        if not torch.cuda.is_available():
+            raise RuntimeError(
+                f"Requested CUDA device index {cuda_index}, but CUDA is not available."
+            )
+        if cuda_index < 0 or cuda_index >= torch.cuda.device_count():
+            raise RuntimeError(
+                f"Requested CUDA device index {cuda_index}, but only {torch.cuda.device_count()} CUDA device(s) are visible."
+            )
+        torch.cuda.set_device(cuda_index)
+        device = "cuda"
     
-    print(f"Using device: {device}")
+    print(f"Using device: {device}" + (f":{torch.cuda.current_device()}" if device == "cuda" else ""))
     
     # Setup tokenizer
     tokenizer = tiktoken.get_encoding("gpt2")
