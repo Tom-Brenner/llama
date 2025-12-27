@@ -54,6 +54,39 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ````
 
+### Dataset: TinyStories (Hugging Face)
+
+This repo expects plain-text files at:
+
+- `data/tinystories/train.txt`
+- `data/tinystories/validation.txt`
+
+You can pull the dataset from Hugging Face ([`roneneldan/TinyStories`](https://huggingface.co/datasets/roneneldan/TinyStories)) and export the two splits like this:
+
+```bash
+python - <<'PY'
+from pathlib import Path
+from datasets import load_dataset
+
+out_dir = Path("data/tinystories")
+out_dir.mkdir(parents=True, exist_ok=True)
+
+ds = load_dataset("roneneldan/TinyStories")
+
+def write_split(split_name: str, out_path: Path) -> None:
+    # Match this repo's DataLoader convention: docs separated by <|endoftext|>
+    with out_path.open("w", encoding="utf-8") as f:
+        for row in ds[split_name]:
+            f.write(row["text"].strip())
+            f.write("\n<|endoftext|>\n")
+
+write_split("train", out_dir / "train.txt")
+write_split("validation", out_dir / "validation.txt")
+print("Wrote:", out_dir / "train.txt")
+print("Wrote:", out_dir / "validation.txt")
+PY
+````
+
 > The trainer auto-detects device: `cuda` → `mps` (Apple Silicon) → `cpu`.
 
 ---
